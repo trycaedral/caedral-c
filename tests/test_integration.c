@@ -87,7 +87,8 @@ int main(void) {
     response = caedral_usage_get(client);
     expect_true(response != NULL, "usage_get");
     if (response != NULL) {
-        expect_true(strstr(caedral_response_body(response), "weeklyPool") != NULL, "usage_has_weekly_pool");
+        expect_true(strstr(caedral_response_body(response), "accountStatus") != NULL, "usage_has_account_status");
+        expect_true(strstr(caedral_response_body(response), "balanceCents") != NULL, "usage_has_balance_cents");
         caedral_response_free(response);
         response = NULL;
     }
