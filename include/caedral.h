@@ -59,6 +59,13 @@ typedef struct caedral_rerank_request {
     int top_n;
 } caedral_rerank_request_t;
 
+typedef struct caedral_notre_saved_breakdown {
+    int present;
+    int cache_hit_tokens;
+    int dedup_tokens;
+    int prefilter_tokens;
+} caedral_notre_saved_breakdown_t;
+
 typedef struct caedral_notre_metadata {
     int present;
     int enabled;
@@ -71,6 +78,10 @@ typedef struct caedral_notre_metadata {
     int input_saved;
     double value_usd;
     char result[16]; /* "optimized" | "no_gain" | "fallback" */
+    /* Contract V3 shape fields (embeddings/rerank economy; 0/"" when absent). */
+    char shape[16]; /* "chat" | "embeddings" | "rerank" */
+    int contract_version;
+    caedral_notre_saved_breakdown_t saved_breakdown;
 } caedral_notre_metadata_t;
 
 typedef struct caedral_stream_chunk {
