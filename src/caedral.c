@@ -191,6 +191,23 @@ void caedral_chat_request_add_message(caedral_chat_request_t *request, const cha
     request->message_count++;
 }
 
+void caedral_chat_request_set_notre(caedral_chat_request_t *request, const char *mode, int telemetry) {
+    if (request == NULL) {
+        return;
+    }
+    free(request->notre_mode);
+    request->notre_mode = NULL;
+    request->notre_telemetry = telemetry ? 1 : 0;
+    if (mode == NULL || mode[0] == '\0') {
+        return;
+    }
+    if (strcmp(mode, "off") != 0 && strcmp(mode, "auto") != 0) {
+        caedral_set_last_error(0, "invalid_argument", "notre mode must be off or auto");
+        return;
+    }
+    request->notre_mode = caedral_strdup(mode);
+}
+
 void caedral_chat_request_free(caedral_chat_request_t *request) {
     size_t i;
     if (request == NULL) {
@@ -202,6 +219,7 @@ void caedral_chat_request_free(caedral_chat_request_t *request) {
     }
     free(request->messages);
     free(request->model);
+    free(request->notre_mode);
     free(request);
 }
 
@@ -387,6 +405,56 @@ char *caedral_chat_response_get_content(const caedral_response_t *response) {
     return result;
 }
 
+int caedral_chat_response_get_notre(const caedral_response_t *response, caedral_notre_metadata_t *out) {
+    cJSON *root;
+    cJSON *notre;
+    cJSON *field;
+    if (out == NULL) {
+        return 0;
+    }
+    memset(out, 0, sizeof(*out));
+    if (response == NULL || response->body == NULL) {
+        return 0;
+    }
+    root = cJSON_Parse(response->body);
+    if (root == NULL) {
+        return 0;
+    }
+    notre = cJSON_GetObjectItemCaseSensitive(root, "notre");
+    if (!cJSON_IsObject(notre)) {
+        cJSON_Delete(root);
+        return 0;
+    }
+    out->present = 1;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "enabled");
+    out->enabled = cJSON_IsTrue(field) ? 1 : 0;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "mode");
+    if (cJSON_IsString(field) && field->valuestring != NULL) {
+        strncpy(out->mode, field->valuestring, sizeof(out->mode) - 1);
+        out->mode[sizeof(out->mode) - 1] = '\0';
+    }
+    field = cJSON_GetObjectItemCaseSensitive(notre, "intervened");
+    out->intervened = cJSON_IsTrue(field) ? 1 : 0;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "fallback_used");
+    out->fallback_used = cJSON_IsTrue(field) ? 1 : 0;
+    /* Contract V2 economy fields (optional; 0 when absent). */
+    field = cJSON_GetObjectItemCaseSensitive(notre, "input_before");
+    if (cJSON_IsNumber(field)) out->input_before = (int)field->valuedouble;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "input_sent");
+    if (cJSON_IsNumber(field)) out->input_sent = (int)field->valuedouble;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "input_saved");
+    if (cJSON_IsNumber(field)) out->input_saved = (int)field->valuedouble;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "value_usd");
+    if (cJSON_IsNumber(field)) out->value_usd = field->valuedouble;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "result");
+    if (cJSON_IsString(field) && field->valuestring != NULL) {
+        strncpy(out->result, field->valuestring, sizeof(out->result) - 1);
+        out->result[sizeof(out->result) - 1] = '\0';
+    }
+    cJSON_Delete(root);
+    return 1;
+}
+
 static char *caedral_build_url(caedral_client_t *client, const char *path) {
     size_t len = strlen(client->base_url) + strlen(path) + 1;
     char *url = (char *)malloc(len);
@@ -496,7 +564,9 @@ static int caedral_stream_write(const char *data, size_t len, caedral_stream_ctx
     return 0;
 }
 
-static size_t caedral_stream_callback_fn(void *contents, size_t size, size_t nmemb, void *userp) {
+/* curl write callback — must not collide with the caedral_stream_callback_fn
+ * typedef in caedral.h (client-facing stream handler signature). */
+static size_t caedral_stream_write_cb(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t total = size * nmemb;
     caedral_stream_ctx_t *ctx = (caedral_stream_ctx_t *)userp;
     if (caedral_buffer_append(&ctx->raw_body, (const char *)contents, total) != CAEDRAL_OK) {
@@ -536,7 +606,7 @@ int caedral_http_stream(
     curl_easy_setopt(client->curl, CURLOPT_POST, 1L);
     curl_easy_setopt(client->curl, CURLOPT_POSTFIELDS, json_body);
     curl_easy_setopt(client->curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, caedral_stream_callback_fn);
+    curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, caedral_stream_write_cb);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &ctx);
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, CAEDRAL_DEFAULT_TIMEOUT_SECONDS);
 
@@ -583,6 +653,16 @@ static char *caedral_chat_request_to_json(const caedral_chat_request_t *request,
         cJSON_AddItemToArray(messages, item);
     }
     cJSON_AddItemToObject(root, "messages", messages);
+    if (request->notre_mode != NULL || request->notre_telemetry) {
+        cJSON *notre = cJSON_CreateObject();
+        if (request->notre_mode != NULL) {
+            cJSON_AddStringToObject(notre, "mode", request->notre_mode);
+        }
+        if (request->notre_telemetry) {
+            cJSON_AddBoolToObject(notre, "telemetry", 1);
+        }
+        cJSON_AddItemToObject(root, "notre", notre);
+    }
     json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     return json;
