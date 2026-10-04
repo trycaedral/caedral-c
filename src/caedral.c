@@ -451,6 +451,25 @@ int caedral_chat_response_get_notre(const caedral_response_t *response, caedral_
         strncpy(out->result, field->valuestring, sizeof(out->result) - 1);
         out->result[sizeof(out->result) - 1] = '\0';
     }
+    /* Contract V3 shape fields (optional; 0/""/NULL when absent). */
+    field = cJSON_GetObjectItemCaseSensitive(notre, "shape");
+    if (cJSON_IsString(field) && field->valuestring != NULL) {
+        strncpy(out->shape, field->valuestring, sizeof(out->shape) - 1);
+        out->shape[sizeof(out->shape) - 1] = '\0';
+    }
+    field = cJSON_GetObjectItemCaseSensitive(notre, "contract_version");
+    if (cJSON_IsNumber(field)) out->contract_version = (int)field->valuedouble;
+    field = cJSON_GetObjectItemCaseSensitive(notre, "saved_breakdown");
+    if (cJSON_IsObject(field)) {
+        cJSON *b;
+        b = cJSON_GetObjectItemCaseSensitive(field, "cache_hit_tokens");
+        if (cJSON_IsNumber(b)) out->saved_breakdown.cache_hit_tokens = (int)b->valuedouble;
+        b = cJSON_GetObjectItemCaseSensitive(field, "dedup_tokens");
+        if (cJSON_IsNumber(b)) out->saved_breakdown.dedup_tokens = (int)b->valuedouble;
+        b = cJSON_GetObjectItemCaseSensitive(field, "prefilter_tokens");
+        if (cJSON_IsNumber(b)) out->saved_breakdown.prefilter_tokens = (int)b->valuedouble;
+        out->saved_breakdown.present = 1;
+    }
     cJSON_Delete(root);
     return 1;
 }
