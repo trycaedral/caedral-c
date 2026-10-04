@@ -36,7 +36,11 @@ build/tests/test_integration: tests/test_integration.c $(STATIC_LIB)
 	@mkdir -p build/tests
 	$(CC) $(CFLAGS) $< -Lbuild -lcaedral $(LDFLAGS) $(LIBS) -o $@
 
-test: build/tests/test_integration
+build/tests/test_notre_v2: tests/test_notre_v2.c $(STATIC_LIB)
+	@mkdir -p build/tests
+	$(CC) $(CFLAGS) $< -Lbuild -lcaedral $(LDFLAGS) $(LIBS) -o $@
+
+test: build/tests/test_integration build/tests/test_notre_v2
 	@python tests/create_test_key.py > build/tests/.test_key 2>build/tests/.test_key_err || true
 	@CAEDRAL_TEST_API_KEY=$$(cat build/tests/.test_key 2>/dev/null); \
 	CAEDRAL_BASE_URL=$${CAEDRAL_BASE_URL:-http://localhost:5001}; \
@@ -44,6 +48,7 @@ test: build/tests/test_integration
 	  CAEDRAL_TEST_API_KEY=$$(python tests/create_test_key.py); \
 	fi; \
 	CAEDRAL_TEST_API_KEY="$$CAEDRAL_TEST_API_KEY" CAEDRAL_BASE_URL="$$CAEDRAL_BASE_URL" ./build/tests/test_integration
+	@./build/tests/test_notre_v2
 
 clean:
 	rm -rf build src/*.o third_party/*.o

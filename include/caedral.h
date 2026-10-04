@@ -28,6 +28,9 @@ typedef struct caedral_chat_request {
     caedral_chat_message_t *messages;
     size_t message_count;
     int stream; /* ignored by create(); set automatically for stream API */
+    /* Optional Notre Runtime. NULL omits the field (backward compatible). */
+    char *notre_mode; /* "off" or "auto" */
+    int notre_telemetry; /* 1 includes telemetry:true */
 } caedral_chat_request_t;
 
 typedef struct caedral_embedding_request {
@@ -56,6 +59,20 @@ typedef struct caedral_rerank_request {
     int top_n;
 } caedral_rerank_request_t;
 
+typedef struct caedral_notre_metadata {
+    int present;
+    int enabled;
+    char mode[16];
+    int intervened;
+    int fallback_used;
+    /* Contract V2 economy fields (0/"" when absent from the response). */
+    int input_before;
+    int input_sent;
+    int input_saved;
+    double value_usd;
+    char result[16]; /* "optimized" | "no_gain" | "fallback" */
+} caedral_notre_metadata_t;
+
 typedef struct caedral_stream_chunk {
     const char *json; /* valid until callback returns */
     void *user_data;
@@ -75,6 +92,8 @@ void caedral_client_free(caedral_client_t *client);
 /* Request builders — caller owns; free with corresponding _free() */
 caedral_chat_request_t *caedral_chat_request_new(const char *model);
 void caedral_chat_request_add_message(caedral_chat_request_t *request, const char *role, const char *content);
+/* mode: "off" or "auto". telemetry: 0 or 1. Omit Notre by never calling this. */
+void caedral_chat_request_set_notre(caedral_chat_request_t *request, const char *mode, int telemetry);
 void caedral_chat_request_free(caedral_chat_request_t *request);
 
 caedral_embedding_request_t *caedral_embedding_request_new(const char *model, const char *input);
@@ -104,6 +123,10 @@ caedral_response_t *caedral_images_generate(caedral_client_t *client, const caed
 caedral_response_t *caedral_audio_generate(caedral_client_t *client, const caedral_audio_request_t *request);
 caedral_response_t *caedral_rerank_create(caedral_client_t *client, const caedral_rerank_request_t *request);
 
+/* Construct a response from a raw body (test/embedding helper; deep-copies body). */
+caedral_response_t *caedral_response_new(int status_code, const char *body);
+void caedral_response_free(caedral_response_t *response);
+
 /* Response accessors — pointers valid until caedral_response_free() */
 void caedral_response_free(caedral_response_t *response);
 int caedral_response_status_code(const caedral_response_t *response);
@@ -113,6 +136,7 @@ const char *caedral_response_error_message(const caedral_response_t *response);
 
 /* Convenience parsers (allocate new strings — caller must free with caedral_free()) */
 char *caedral_chat_response_get_content(const caedral_response_t *response);
+int caedral_chat_response_get_notre(const caedral_response_t *response, caedral_notre_metadata_t *out);
 void caedral_free(void *ptr);
 
 #ifdef __cplusplus
